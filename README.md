@@ -93,9 +93,7 @@ All configuration is via environment variables. Defaults are shown in parenthese
 
 The service is designed to sit behind a load balancer / ingress controller. The real client IP is determined as follows:
 
-1. If `ENV=dev`, always trust `X-Forwarded-For` (rightmost IP in the comma-separated list).
-2. Otherwise, check whether the connecting IP is in `TRUSTED_PROXIES`. If it is, trust `X-Forwarded-For`.
-3. If the connecting IP isn't trusted, use `RemoteAddr` directly and ignore `X-Forwarded-For`.
+The rate limiter middleware will look at the X-Forwarded-For header and take the last entry. Which in itself is not exactly secure. So to mitigate the harm I have another middleware infront of that called OnlyTrustedCommunication which will commpare the RemoteAddr and the url param to a whitelist of valid connections which are specified in the env vars. So by the time we get to the rate limiter we know we can trust the X-Forwarded-For header.
 
 This prevents clients from spoofing their IP via a fake `X-Forwarded-For` header. In production, set `TRUSTED_PROXIES` to your load balancer's CIDR range (e.g. `10.0.0.0/8` for a typical cloud VPC).
 
