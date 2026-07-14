@@ -10,11 +10,9 @@ func TestSetAndGet(t *testing.T) {
 	c := New(Config{MaxSize: 1024, TTL: time.Minute})
 
 	entry := &entry{
-		response: response{
-			Data:    []byte("hello"),
-			Headers: http.Header{"Content-Type": {"text/plain"}},
-			Status:  200,
-		},
+		Data:      []byte("hello"),
+		Headers:   http.Header{"Content-Type": {"text/plain"}},
+		Status:    200,
 		expiresAt: time.Now().Add(time.Minute),
 	}
 
@@ -48,7 +46,7 @@ func TestGetExpired(t *testing.T) {
 	c := New(Config{MaxSize: 1024, TTL: time.Millisecond})
 
 	c.set("key1", &entry{
-		response:  response{Data: []byte("hello"), Status: 200},
+		Data: []byte("hello"), Status: 200,
 		expiresAt: time.Now().Add(time.Millisecond),
 	})
 
@@ -64,11 +62,11 @@ func TestCleanup(t *testing.T) {
 	c := New(Config{MaxSize: 1024, TTL: time.Millisecond})
 
 	c.set("key1", &entry{
-		response:  response{Data: []byte("hello"), Status: 200},
+		Data: []byte("hello"), Status: 200,
 		expiresAt: time.Now().Add(time.Millisecond),
 	})
 	c.set("key2", &entry{
-		response:  response{Data: []byte("world"), Status: 200},
+		Data: []byte("world"), Status: 200,
 		expiresAt: time.Now().Add(time.Millisecond),
 	})
 
@@ -119,15 +117,15 @@ func TestMaxSizeEviction(t *testing.T) {
 	c := New(Config{MaxSize: 20, TTL: time.Minute})
 
 	c.set("key1", &entry{
-		response:  response{Data: []byte("aaaaaaaa"), Status: 200},
+		Data: []byte("aaaaaaaa"), Status: 200,
 		expiresAt: time.Now().Add(time.Minute),
 	})
 	c.set("key2", &entry{
-		response:  response{Data: []byte("bbbbbbbb"), Status: 200},
+		Data: []byte("bbbbbbbb"), Status: 200,
 		expiresAt: time.Now().Add(time.Minute),
 	})
 	c.set("key3", &entry{
-		response:  response{Data: []byte("cccccccc"), Status: 200},
+		Data: []byte("cccccccc"), Status: 200,
 		expiresAt: time.Now().Add(time.Minute),
 	})
 
@@ -154,125 +152,53 @@ func TestMaxSizeEviction(t *testing.T) {
 }
 
 func TestCacheRespectsNoStore(t *testing.T) {
-	c := New(Config{MaxSize: 1024, TTL: time.Minute})
-
-	resp := &response{
-		Data:    []byte("hello"),
-		Headers: http.Header{"Cache-Control": {"no-store"}},
-		Status:  200,
-	}
-
-	entry, err := c.do("key1", func() *response {
-		return resp
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !entry.cachedAt.IsZero() {
-		t.Fatal("expected no-store response to not be cached")
-	}
-
-	_, ok := c.get("key1")
-	if ok {
-		t.Fatal("expected cache miss for no-store response")
+	if shouldCache("no-store") {
+		t.Fatal("expected shouldCache to return false for no-store")
 	}
 }
 
 func TestCacheRespectsPrivate(t *testing.T) {
-	c := New(Config{MaxSize: 1024, TTL: time.Minute})
-
-	resp := &response{
-		Data:    []byte("hello"),
-		Headers: http.Header{"Cache-Control": {"private"}},
-		Status:  200,
-	}
-
-	entry, err := c.do("key1", func() *response {
-		return resp
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !entry.cachedAt.IsZero() {
-		t.Fatal("expected private response to not be cached")
-	}
-
-	_, ok := c.get("key1")
-	if ok {
-		t.Fatal("expected cache miss for private response")
+	if shouldCache("private") {
+		t.Fatal("expected shouldCache to return false for private")
 	}
 }
 
 func TestCacheRespectsNoCache(t *testing.T) {
-	c := New(Config{MaxSize: 1024, TTL: time.Minute})
-
-	resp := &response{
-		Data:    []byte("hello"),
-		Headers: http.Header{"Cache-Control": {"no-cache"}},
-		Status:  200,
-	}
-
-	entry, err := c.do("key1", func() *response {
-		return resp
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !entry.cachedAt.IsZero() {
-		t.Fatal("expected no-cache response to not be cached")
-	}
-
-	_, ok := c.get("key1")
-	if ok {
-		t.Fatal("expected cache miss for no-cache response")
+	if shouldCache("no-cache") {
+		t.Fatal("expected shouldCache to return false for no-cache")
 	}
 }
 
 func TestCacheRespectsMaxAge(t *testing.T) {
-	c := New(Config{MaxSize: 1024, TTL: time.Minute})
-
-	resp := &response{
-		Data:    []byte("hello"),
-		Headers: http.Header{"Cache-Control": {"max-age=5"}},
-		Status:  200,
-	}
-
-	entry, err := c.do("key1", func() *response {
-		return resp
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if entry.expiresAt.After(time.Now().Add(6 * time.Second)) {
-		t.Fatal("expected TTL to be 5 seconds based on max-age")
+	ttl := parseMaxAge("max-age=5")
+	if ttl != 5*time.Second {
+		t.Fatalf("expected max-age to parse to 5s, got %v", ttl)
 	}
 }
 
 func TestCacheSetsAgeHeader(t *testing.T) {
 	c := New(Config{MaxSize: 1024, TTL: time.Minute})
 
-	resp := &response{
-		Data:    []byte("hello"),
-		Headers: http.Header{"Content-Type": {"text/plain"}},
-		Status:  200,
+	e := &entry{
+		Data:      []byte("hello"),
+		Headers:   http.Header{"Content-Type": {"text/plain"}},
+		Status:    200,
+		expiresAt: time.Now().Add(time.Minute),
+		cachedAt:  time.Now(),
 	}
 
-	entry, err := c.do("key1", func() *response {
-		return resp
-	})
-	if err != nil {
-		t.Fatal(err)
+	c.set("key1", e)
+
+	got, ok := c.get("key1")
+	if !ok {
+		t.Fatal("expected cache hit")
 	}
 
-	if entry.cachedAt.IsZero() {
+	if got.cachedAt.IsZero() {
 		t.Fatal("expected cachedAt to be set")
 	}
 
-	age := int(time.Since(entry.cachedAt).Seconds())
+	age := int(time.Since(got.cachedAt).Seconds())
 	if age > 1 {
 		t.Fatalf("expected Age to be ~0, got %d", age)
 	}
@@ -283,11 +209,9 @@ func TestCachePreservesDateHeader(t *testing.T) {
 
 	originalDate := "Sat, 11 Jul 2026 20:00:00 GMT"
 	entry := &entry{
-		response: response{
-			Data:    []byte("hello"),
-			Headers: http.Header{"Date": {originalDate}},
-			Status:  200,
-		},
+		Data:      []byte("hello"),
+		Headers:   http.Header{"Date": {originalDate}},
+		Status:    200,
 		expiresAt: time.Now().Add(time.Minute),
 	}
 

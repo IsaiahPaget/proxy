@@ -79,9 +79,11 @@ func (app *Application) OnlyTrustedCommunication(next http.Handler) http.Handler
 			addr, err := netip.ParseAddr(remoteIP)
 			if err != nil {
 				http.Error(w, "Malformed ip", http.StatusBadRequest)
+				return
 			}
 			if !app.isTrustedProxy(addr) {
 				http.Error(w, "Forbidden", http.StatusForbidden)
+				return
 			}
 		}
 
